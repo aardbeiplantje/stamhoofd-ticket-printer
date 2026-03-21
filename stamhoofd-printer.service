@@ -1,0 +1,35 @@
+[Unit]
+Description=Stamhoofd Ticket Printer Service
+After=bluetooth.target
+Wants=bluetooth.target
+Documentation=https://github.com/stamhoofd/stamhoofd-ticket-printer
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/lib/stamhoofd-printer
+ExecStart=/usr/bin/python3 /usr/local/bin/stamhoofd.py
+
+# Auto-restart configuration
+Restart=always
+RestartSec=5
+StartLimitInterval=60s
+StartLimitBurst=3
+
+# Environment variables - configure these with your values
+EnvironmentFile=-/etc/stamhoofd-printer.env
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=stamhoofd-printer
+
+# Security and resource limits
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/stamhoofd-printer
+
+[Install]
+WantedBy=multi-user.target

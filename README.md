@@ -127,33 +127,7 @@ MX10_BLE_ADDRESS=1A:11:27:22:D3:91 \
 ./stamhoofd.py
 ```
 
-Run as systemd service:
-```bash
-sudo cp stamhoofd.py /usr/local/bin/
-sudo tee /etc/systemd/system/stamhoofd-printer.service > /dev/null <<EOF
-[Unit]
-Description=Stamhoofd Order Printer Daemon
-After=network.target bluetooth.target
-
-[Service]
-Type=simple
-User=printer
-WorkingDirectory=/opt/stamhoofd-printer
-Environment="STAMHOOFD_ORG_ID=your-org-id"
-Environment="STAMHOOFD_WEBSHOP_ID=your-webshop-id"
-Environment="STAMHOOFD_API_KEY=your-api-key"
-Environment="MX10_BLE_ADDRESS=1A:11:27:22:D3:91"
-ExecStart=/usr/local/bin/stamhoofd.py
-Restart=on-failure
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl enable stamhoofd-printer.service
-sudo systemctl start stamhoofd-printer.service
-```
+Run as systemd service (see [Systemd Setup](#systemd-setup) below).
 
 **How It Works:**
 
@@ -220,7 +194,79 @@ MX10_BLE_ADDR_TYPE=random ./stamhoofd.py
 **Systemd service won't start:**
 - Check logs: `sudo journalctl -u stamhoofd-printer -f`
 - Verify user has permission to access Bluetooth and working directory
-- Ensure all required environment variables are set in service file
+- Ensure all required environment variables are set in `/etc/stamhoofd-printer.env`
+
+## Systemd Setup
+
+A service file is provided at `stamhoofd-printer.service` that:
+- **Auto-restart**: Restarts every 5 seconds if the service dies
+- **Restart limits**: Maximum 3 restarts within 60 seconds to prevent infinite restart loops
+- **Bluetooth dependency**: Waits for the Bluetooth subsystem before starting
+- **Logging**: All output goes to the systemd journal
+- **Security**: Runs with restricted filesystem access
+- Reads environment variables from `/etc/stamhoofd-printer.env`
+
+**1. Install the script:**
+```bash
+sudo cp stamhoofd.py /usr/local/bin/
+sudo chmod +x /usr/local/bin/stamhoofd.py
+```
+
+**2. Create the working and data directories:**
+```bash
+sudo mkdir -p /var/lib/stamhoofd-printer/printed_orders
+```
+
+**3. Copy the service file:**
+```bash
+sudo cp stamhoofd-printer.service /etc/systemd/system/
+```
+
+**4. Create the environment config file:**
+```bash
+sudo cp stamhoofd-printer.env.example /etc/stamhoofd-printer.env
+sudo nano /etc/stamhoofd-printer.env   # fill in your actual values
+```
+
+**3. Set proper permissions on the env file:**
+```bash
+sudo chmod 600 /etc/stamhoofd-printer.env
+```
+
+**4. Reload systemd and enable the service:**
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now stamhoofd-printer.service
+```
+
+**Check service status:**
+```bash
+sudo systemctl status stamhoofd-printer.service
+```
+
+**Follow live logs:**
+```bash
+sudo journalctl -u stamhoofd-printer.service -f
+```
+
+**View recent logs:**
+```bash
+sudo journalctl -u stamhoofd-printer.service -n 50
+```
+
+**Stop / restart / disable:**
+```bash
+sudo systemctl stop stamhoofd-printer.service
+sudo systemctl restart stamhoofd-printer.service
+sudo systemctl disable stamhoofd-printer.service
+```
+
+**Troubleshooting the service:**
+
+If the service fails to start, check:
+1. Environment variables are set correctly in `/etc/stamhoofd-printer.env`
+2. Bluetooth is available: `bluetoothctl show`
+3. Logs for errors: `sudo journalctl -u stamhoofd-printer.service -n 100`
 
 ## Architecture
 
