@@ -66,17 +66,17 @@ CMD_DRAWING_MODE = 0xBE
 
 if API_KEY is None or len(API_KEY) == 0:
     logger.error("Need STAMHOOFD_API_KEY")
-    raise ValueError("set STAMHOOFD_API_KEY")
+    sys.exit(1)
 if MX10_BLE_ADDRESS is None or len(MX10_BLE_ADDRESS) == 0:
     logger.error("Need MX10_BLE_ADDRESS")
-    raise ValueError("set MX10_BLE_ADDRESS")
+    sys.exit(1)
 
 if ORG_ID is None or len(ORG_ID) == 0:
     logger.error("Need STAMHOOFD_ORG_ID")
-    raise ValueError("set STAMHOOFD_ORG_ID")
+    sys.exit(1)
 if WEBSHOP_ID is None or len(WEBSHOP_ID) == 0:
     logger.error("Need STAMHOOFD_WEBSHOP_ID")
-    raise ValueError("set STAMHOOFD_WEBSHOP_ID")
+    sys.exit(1)
 API_URL = f"https://{ORG_ID}.api.stamhoofd.app/v191/webshop/{WEBSHOP_ID}/orders"
 HEADERS = {"Authorization": f"Bearer {API_KEY}"}
 
