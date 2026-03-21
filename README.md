@@ -6,7 +6,7 @@ Automated order printing daemon that integrates with Stamhoofd webshops to autom
 
 Install dependencies:
 ```bash
-pip install Pillow requests pytz
+pip install -r requirements.txt
 ```
 
 Configure environment variables and run:
@@ -30,7 +30,7 @@ export MX10_BLE_ADDRESS="1A:11:27:22:D3:91"
 
 1. Install Python dependencies:
 ```bash
-pip install Pillow requests pytz
+pip install -r requirements.txt
 ```
 
 2. Install BlueZ (if not already installed):
@@ -73,7 +73,7 @@ Automated order printing daemon that monitors a Stamhoofd webshop for new orders
 
 **Requirements:**
 ```bash
-pip install Pillow requests pytz
+pip install -r requirements.txt
 ```
 
 Also requires:
