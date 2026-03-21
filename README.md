@@ -206,34 +206,45 @@ A service file is provided at `stamhoofd-printer.service` that:
 - **Security**: Runs with restricted filesystem access
 - Reads environment variables from `/etc/stamhoofd-printer.env`
 
-**1. Install the script:**
+**1. Install host dependencies (preferred for systemd services on Debian/Ubuntu):**
+```bash
+sudo apt-get update
+sudo apt-get install -y bluez bluetooth python3 python3-pil python3-requests python3-pytz
+```
+
+If one of these Python packages is unavailable in your distro, use this fallback:
+```bash
+sudo /usr/bin/python3 -m pip install -r requirements.txt
+```
+
+**2. Install the script:**
 ```bash
 sudo cp stamhoofd.py /usr/local/bin/
 sudo chmod +x /usr/local/bin/stamhoofd.py
 ```
 
-**2. Create the working and data directories:**
+**3. Create the working and data directories:**
 ```bash
 sudo mkdir -p /var/lib/stamhoofd-printer/printed_orders
 ```
 
-**3. Copy the service file:**
+**4. Copy the service file:**
 ```bash
 sudo cp stamhoofd-printer.service /etc/systemd/system/
 ```
 
-**4. Create the environment config file:**
+**5. Create the environment config file:**
 ```bash
 sudo cp stamhoofd-printer.env.example /etc/stamhoofd-printer.env
 sudo nano /etc/stamhoofd-printer.env   # fill in your actual values
 ```
 
-**3. Set proper permissions on the env file:**
+**6. Set proper permissions on the env file:**
 ```bash
 sudo chmod 600 /etc/stamhoofd-printer.env
 ```
 
-**4. Reload systemd and enable the service:**
+**7. Reload systemd and enable the service:**
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now stamhoofd-printer.service
