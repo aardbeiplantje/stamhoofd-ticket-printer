@@ -451,7 +451,7 @@ def concise_order_summary(order):
     if order["data"]["recordAnswers"][0]["settings"]["name"] == "TAFEL":
         table = order["data"]["recordAnswers"][0]["value"]
     if table is None:
-        ValueError("NO 'TAFEL'")
+        raise ValueError("NO 'TAFEL'")
     items = order["data"]["cart"]["items"]
     item_parts = []
     for item in items:
@@ -484,7 +484,8 @@ def is_order_already_printed(order_id):
 def save_printed_order(order):
     order_id = order.get("id")
     if not order_id:
-        raise ValueError("Order has no id; cannot persist print state")
+        logger.error("Order has no id; cannot persist print state")
+        sys.exit(1)
 
     ensure_printed_orders_dir()
     final_path = order_file_path(order_id)
@@ -501,10 +502,10 @@ def generate_receipt(order):
     if order["data"]["recordAnswers"][0]["settings"]["name"] == "TAFEL":
         table = order["data"]["recordAnswers"][0]["value"]
     if table is None:
-        ValueError("NO 'TAFEL'")
+        raise ValueError("NO 'TAFEL'")
     items = order["data"]["cart"]["items"]
     if len(items) < 1:
-        ValueError("NO ITEMS")
+        raise ValueError("NO ITEMS")
 
     # let's add the order number, table and a timestamp
     tz = pytz.timezone("Europe/Brussels")
