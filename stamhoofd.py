@@ -603,12 +603,14 @@ def main():
         printer.disconnect()
 
     try:
+        consecutive_429 = 0
         while True:
             idle_print = True
             sleep_seconds = SLEEP_TIME
             API_RATE_LIMITER.wait_for_slot()
             response = requests.get(API_URL, headers=HEADERS, timeout=15)
             if response.status_code == 200:
+                consecutive_429 = 0
                 orders = response.json().get('results', [])
                 neworders = {}
                 failorders = {}
@@ -650,15 +652,19 @@ def main():
                     else:
                         logger.info(f"Fetched/processed {len(neworders)} orders")
             elif response.status_code == 429:
+                consecutive_429 += 1
                 retry_after = response.headers.get("Retry-After")
                 if retry_after and retry_after.isdigit():
                     sleep_seconds = max(int(retry_after), SLEEP_TIME)
                 else:
-                    sleep_seconds = max(SLEEP_TIME * 8, 180)
+                    # If Retry-After is missing, increase backoff aggressively.
+                    # This avoids hammering the API when daily quota is exhausted.
+                    sleep_seconds = min(max(180 * (2 ** (consecutive_429 - 1)), 180), 21600)
                 logger.warning(
-                    f"Order poll rate-limited (429). Backing off for {sleep_seconds} seconds"
+                    f"Order poll rate-limited (429, streak={consecutive_429}). Backing off for {sleep_seconds} seconds"
                 )
             else:
+                consecutive_429 = 0
                 logger.warning(f"Order poll failed: status={response.status_code} url={API_URL}")
 
             # Keep BLE session alive when idle so MX10 stays awake.
