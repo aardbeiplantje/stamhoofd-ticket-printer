@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 import requests
 import time
+from collections import deque
 
 ORG_ID  = os.environ.get("STAMHOOFD_ORG_ID")
 WEBSHOP_ID = os.environ.get("STAMHOOFD_WEBSHOP_ID")
@@ -79,6 +80,53 @@ if WEBSHOP_ID is None or len(WEBSHOP_ID) == 0:
     sys.exit(1)
 API_URL = f"https://{ORG_ID}.api.stamhoofd.app/v191/webshop/{WEBSHOP_ID}/orders"
 HEADERS = {"Authorization": f"Bearer {API_KEY}"}
+
+
+class MultiWindowRateLimiter:
+    def __init__(self, limits):
+        # limits: list of (window_seconds, max_requests_in_window)
+        self.limits = sorted(limits, key=lambda x: x[0])
+        self.events = {window: deque() for window, _ in self.limits}
+
+    def _prune(self, now):
+        for window, _ in self.limits:
+            q = self.events[window]
+            cutoff = now - window
+            while q and q[0] <= cutoff:
+                q.popleft()
+
+    def _required_wait(self, now):
+        wait = 0.0
+        for window, max_requests in self.limits:
+            q = self.events[window]
+            if len(q) >= max_requests:
+                # Wait until the oldest request in this window expires.
+                candidate = (q[0] + window) - now
+                if candidate > wait:
+                    wait = candidate
+        return max(wait, 0.0)
+
+    def wait_for_slot(self):
+        while True:
+            now = time.monotonic()
+            self._prune(now)
+            wait = self._required_wait(now)
+            if wait <= 0:
+                break
+            time.sleep(wait)
+
+        stamp = time.monotonic()
+        self._prune(stamp)
+        for window, _ in self.limits:
+            self.events[window].append(stamp)
+
+
+API_RATE_LIMITER = MultiWindowRateLimiter([
+    (5, 25),        # 5 req/s maintained for 5s
+    (150, 150),     # 1 req/s maintained for 150s
+    (3600, 1000),   # 1000 req/hour
+    (86400, 2000),  # 2000 req/day
+])
 
 
 def crc8(data):
@@ -558,6 +606,7 @@ def main():
         while True:
             idle_print = True
             sleep_seconds = SLEEP_TIME
+            API_RATE_LIMITER.wait_for_slot()
             response = requests.get(API_URL, headers=HEADERS, timeout=15)
             if response.status_code == 200:
                 orders = response.json().get('results', [])
@@ -605,7 +654,7 @@ def main():
                 if retry_after and retry_after.isdigit():
                     sleep_seconds = max(int(retry_after), SLEEP_TIME)
                 else:
-                    sleep_seconds = max(SLEEP_TIME * 4, 60)
+                    sleep_seconds = max(SLEEP_TIME * 8, 180)
                 logger.warning(
                     f"Order poll rate-limited (429). Backing off for {sleep_seconds} seconds"
                 )
