@@ -523,11 +523,32 @@ def generate_receipt(order):
     order_text += "\nThanks!\n"
     return order_text
 
+
+def print_startup_message(printer):
+    tz = pytz.timezone("Europe/Brussels")
+    now = datetime.now(tz).strftime("%d/%m/%Y %H:%M")
+    boot_text = (
+        "-- STARTUP --\n"
+        "Ticket printer service started\n"
+        f"{now}\n"
+    )
+
+    printer.ensure_connected()
+    printer.print_text(boot_text, feed_steps=20)
+
 def main():
     logger.info("Starting order watcher")
     logger.info("Polling URL: %s", API_URL)
     logger.info("Printed-order store: %s", os.path.abspath(PRINTED_ORDERS_DIR))
     printer = MX10BlePrinter(MX10_BLE_ADDRESS, addr_type=MX10_BLE_ADDR_TYPE)
+
+    try:
+        print_startup_message(printer)
+        logger.info("Printed startup message")
+    except Exception as e:
+        logger.warning(f"Failed to print startup message: {e}")
+        printer.disconnect()
+
     try:
         while True:
             idle_print = True
