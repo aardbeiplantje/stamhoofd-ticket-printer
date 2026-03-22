@@ -507,6 +507,8 @@ def generate_receipt(order):
     if len(items) < 1:
         raise ValueError("NO ITEMS")
 
+    total_items = 0
+
     # let's add the order number, table and a timestamp
     tz = pytz.timezone("Europe/Brussels")
     now = datetime.now(tz).strftime("%d/%m/%Y %H:%M")
@@ -518,7 +520,10 @@ def generate_receipt(order):
         qty = item["amount"]
         if qty is None or qty < 1:
             qty = 1
+        total_items += qty
         order_text += f"{qty}x {name}\n"
+
+    order_text += f"\nTOTAL ITEMS: {total_items}\n"
 
     order_text += "\nThanks!\n"
     return order_text
