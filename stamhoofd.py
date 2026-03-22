@@ -552,6 +552,7 @@ def main():
     try:
         while True:
             idle_print = True
+            sleep_seconds = SLEEP_TIME
             response = requests.get(API_URL, headers=HEADERS, timeout=15)
             if response.status_code == 200:
                 orders = response.json().get('results', [])
@@ -594,6 +595,15 @@ def main():
                         logger.error(f"Fetched/processed {len(neworders)} orders, printed {len(neworders) - len(failorders)}")
                     else:
                         logger.info(f"Fetched/processed {len(neworders)} orders")
+            elif response.status_code == 429:
+                retry_after = response.headers.get("Retry-After")
+                if retry_after and retry_after.isdigit():
+                    sleep_seconds = max(int(retry_after), SLEEP_TIME)
+                else:
+                    sleep_seconds = max(SLEEP_TIME * 4, 60)
+                logger.warning(
+                    f"Order poll rate-limited (429). Backing off for {sleep_seconds} seconds"
+                )
             else:
                 logger.warning(f"Order poll failed: status={response.status_code} url={API_URL}")
 
@@ -606,8 +616,8 @@ def main():
                     logger.warning(f"Keepalive failed, will reconnect later: {e}")
                     printer.disconnect()
 
-            logger.info(f"Sleeping for {SLEEP_TIME} seconds")
-            time.sleep(SLEEP_TIME) # Poll every X seconds
+            logger.info(f"Sleeping for {sleep_seconds} seconds")
+            time.sleep(sleep_seconds) # Poll every X seconds, or back off on 429
     except KeyboardInterrupt:
         printer.disconnect()
     except OSError:
