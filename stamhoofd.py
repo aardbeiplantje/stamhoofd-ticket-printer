@@ -8,7 +8,7 @@ import socket
 import struct
 import ctypes
 sys.tracebacklimit = None
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 import pytz
 from PIL import Image, ImageDraw, ImageFont
@@ -658,7 +658,7 @@ def persist_sleep_state(seconds, reason):
     payload = {
         "sleep_seconds": float(seconds),
         "reason": reason,
-        "updated_at": datetime.utcnow().isoformat() + "Z",
+        "updated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
     tmp_path = SLEEP_STATE_FILE + ".tmp"
     with open(tmp_path, "w", encoding="utf-8") as fh:
