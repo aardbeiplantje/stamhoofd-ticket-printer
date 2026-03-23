@@ -61,7 +61,7 @@ bluetoothctl
 Automated order printing daemon that monitors a Stamhoofd webshop for new orders and prints tickets to the MX10 printer via native BLE connection.
 
 **Stamhoofd API documentation:**
-- Official API docs: https://stamhoofd.app/docs/api
+- Official API docs: https://www.stamhoofd.be/docs/api/
 - Orders endpoint used by this daemon: `https://{org}.api.stamhoofd.app/v191/webshop/{webshop}/orders`
 
 **Rate strategy used by this daemon:**
