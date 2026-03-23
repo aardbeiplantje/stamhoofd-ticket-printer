@@ -60,8 +60,19 @@ bluetoothctl
 
 Automated order printing daemon that monitors a Stamhoofd webshop for new orders and prints tickets to the MX10 printer via native BLE connection.
 
+**Stamhoofd API documentation:**
+- Official API docs: https://stamhoofd.app/docs/api
+- Orders endpoint used by this daemon: `https://{org}.api.stamhoofd.app/v191/webshop/{webshop}/orders`
+
+**Rate strategy used by this daemon:**
+- Hard client-side caps are enforced for all configured limits.
+- Polling interval is computed from the strictest quota with a safety margin.
+- `STAMHOOFD_EVENT_DURATION_HOURS` exists because the daily limit (`2000/day`) becomes stricter for shorter events.
+- HTTP 429 responses trigger additional back-off; use `Retry-After` when provided by the API.
+- If `Retry-After` is missing, the daemon uses escalating delays (up to 6 hours) to avoid burning quota.
+
 **Features:**
-- Polls Stamhoofd API every 15 seconds for new orders
+- Polls Stamhoofd API at a quota-aware interval (or fixed interval if overridden)
 - Native BLE support (no subprocess call to Perl script)
 - Pillow-based text rendering (no ImageMagick dependency)
 - Persistent connection with keepalive to keep printer awake when idle
@@ -131,7 +142,7 @@ Run as systemd service (see [Systemd Setup](#systemd-setup) below).
 
 **How It Works:**
 
-1. **Polling Loop**: Connects to Stamhoofd API every 15 seconds to fetch new orders
+1. **Polling Loop**: Connects to Stamhoofd API at a quota-aware interval to fetch new orders
 2. **Order Deduplication**: Marks orders as printed using JSON files in `STAMHOOFD_PRINTED_BASE_DIR/<org>/<webshop>/<order_id>.json.printed`
 3. **BLE Connection**: Maintains persistent BLE connection to MX10 printer
 4. **Keepalive**: Sends low-overhead heartbeat command to keep printer from going to sleep when idle
@@ -326,7 +337,7 @@ Stamhoofd API
 - **Text rendering**: ~100-500 ms per order
 - **Printing**: ~1-3 seconds per ticket
 - **Paper feeding**: ~200-300 ms
-- **API Poll latency**: ~5-15 seconds (15-second poll interval + network)
+- **API Poll latency**: Variable (quota-aware interval + network; can be overridden with `STAMHOOFD_POLL_SECONDS`)
 - **Typical end-to-end**: 10-30 seconds from order placement to print
 
 ## Architecture Details
