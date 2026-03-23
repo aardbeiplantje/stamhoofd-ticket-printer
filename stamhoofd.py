@@ -13,12 +13,36 @@ import logging
 import pytz
 from PIL import Image, ImageDraw, ImageFont
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-logger = logging.getLogger(__name__)
+class _ColorFormatter(logging.Formatter):
+    _COLORS = {
+        logging.DEBUG:    "\033[36m",   # cyan
+        logging.INFO:     "\033[32m",   # green
+        logging.WARNING:  "\033[33m",   # yellow
+        logging.ERROR:    "\033[31m",   # red
+        logging.CRITICAL: "\033[35m",   # magenta
+    }
+    _RESET = "\033[0m"
+    _BOLD  = "\033[1m"
+
+    def format(self, record):
+        color = self._COLORS.get(record.levelno, "")
+        record.levelname = f"{color}{self._BOLD}{record.levelname}{self._RESET}"
+        return super().format(record)
+
+
+def _build_handler():
+    handler = logging.StreamHandler()
+    use_color = hasattr(handler.stream, "isatty") and handler.stream.isatty()
+    fmt = "%(asctime)s [%(process)d] %(name)s %(levelname)s %(message)s"
+    formatter = _ColorFormatter(fmt, datefmt="%Y-%m-%d %H:%M:%S") if use_color \
+                else logging.Formatter(fmt, datefmt="%Y-%m-%d %H:%M:%S")
+    handler.setFormatter(formatter)
+    return handler
+
+
+logging.root.setLevel(logging.INFO)
+logging.root.handlers = [_build_handler()]
+logger = logging.getLogger("stamhoofd-printer")
 
 import requests
 import time
@@ -875,7 +899,7 @@ def main():
             except Exception as e:
                 logger.warning(f"Failed to persist sleep state to {SLEEP_STATE_FILE}: {e}")
 
-            logger.info(f"Sleeping for {sleep_seconds} seconds")
+            logger.debug(f"Sleeping for {sleep_seconds} seconds")
             time.sleep(sleep_seconds) # Poll every X seconds, or back off on 429
     except KeyboardInterrupt:
         printer.disconnect()
