@@ -184,6 +184,7 @@ Run as systemd service (see [Systemd Setup](#systemd-setup) below).
 - `MX10_FONT_SIZE` - Font size in pixels (default: `24`)
 - `MX10_FONT_PATH` - Path to TrueType font file (default: system DejaVu Sans)
 - `MX10_KEEPALIVE_SECONDS` - Idle keepalive interval in seconds (default: `12`)
+- `STAMHOOFD_TABLE_FIELD` - Name of the `recordAnswers` field used to identify the table/tafel (default: `TAFEL`). The daemon searches the full list by name, so position in the list does not matter.
 - `STAMHOOFD_PRINTED_BASE_DIR` - Base directory for order state files (default: `printed_orders`)
 - `STAMHOOFD_STATE_DIR` - Base directory for runtime state files (default: `/var/lib/stamhoofd-printer`)
 - `STAMHOOFD_SLEEP_STATE_FILE` - File storing current sleep/back-off state (default: `/var/lib/stamhoofd-printer/sleep_state.json`)

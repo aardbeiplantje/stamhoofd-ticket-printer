@@ -40,6 +40,7 @@ SLEEP_STATE_FILE = os.environ.get(
     "STAMHOOFD_SLEEP_STATE_FILE",
     os.path.join(STATE_DIR, "sleep_state.json"),
 )
+TABLE_FIELD_NAME = os.environ.get("STAMHOOFD_TABLE_FIELD", "TAFEL")
 MX10_FONT_SIZE = int(os.environ.get("MX10_FONT_SIZE", "24"))
 MX10_KEEPALIVE_SECONDS = int(os.environ.get("MX10_KEEPALIVE_SECONDS", "12"))
 MX10_FONT_PATH = os.environ.get("MX10_FONT_PATH")
@@ -541,6 +542,13 @@ def safe_path_component(value):
     return re.sub(r"[^A-Za-z0-9_.-]", "_", value)
 
 
+def find_record_answer(order, field_name):
+    for answer in order.get("data", {}).get("recordAnswers", []):
+        if answer.get("settings", {}).get("name") == field_name:
+            return answer.get("value")
+    return None
+
+
 PRINTED_ORDERS_ORG_DIR = os.path.join(
     PRINTED_ORDERS_BASE_DIR,
     safe_path_component(ORG_ID),
@@ -551,11 +559,9 @@ def concise_order_summary(order):
     order_number = order.get("number", "?")
     order_id = order["id"]
     name  = order["data"]["customer"]["email"]
-    table = None
-    if order["data"]["recordAnswers"][0]["settings"]["name"] == "TAFEL":
-        table = order["data"]["recordAnswers"][0]["value"]
+    table = find_record_answer(order, TABLE_FIELD_NAME)
     if table is None:
-        raise ValueError("NO 'TAFEL'")
+        raise ValueError(f"NO '{TABLE_FIELD_NAME}'")
     items = order["data"]["cart"]["items"]
     item_parts = []
     for item in items:
@@ -606,11 +612,9 @@ def save_printed_order(order, webshop_id):
 def generate_receipt(order):
     order_number = order.get("number", "?")
     customer = order["data"]["customer"]["email"]
-    table = None
-    if order["data"]["recordAnswers"][0]["settings"]["name"] == "TAFEL":
-        table = order["data"]["recordAnswers"][0]["value"]
+    table = find_record_answer(order, TABLE_FIELD_NAME)
     if table is None:
-        raise ValueError("NO 'TAFEL'")
+        raise ValueError(f"NO '{TABLE_FIELD_NAME}'")
     items = order["data"]["cart"]["items"]
     if len(items) < 1:
         raise ValueError("NO ITEMS")
