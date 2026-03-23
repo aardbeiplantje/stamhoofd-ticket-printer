@@ -29,7 +29,8 @@ WEBSHOP_ID = os.environ.get("STAMHOOFD_WEBSHOP_ID")
 API_KEY = os.environ.get("STAMHOOFD_API_KEY")
 MX10_BLE_ADDRESS = os.environ.get("MX10_BLE_ADDRESS")
 MX10_BLE_ADDR_TYPE = os.environ.get("MX10_BLE_ADDR_TYPE", "public").lower()
-SLEEP_TIME = 15
+EVENT_DURATION_HOURS = float(os.environ.get("STAMHOOFD_EVENT_DURATION_HOURS", "6"))
+RATE_SAFETY_MARGIN = float(os.environ.get("STAMHOOFD_RATE_SAFETY_MARGIN", "0.9"))
 PRINTED_ORDERS_BASE_DIR = os.environ.get("STAMHOOFD_PRINTED_BASE_DIR", "printed_orders")
 MX10_FONT_SIZE = int(os.environ.get("MX10_FONT_SIZE", "24"))
 MX10_KEEPALIVE_SECONDS = int(os.environ.get("MX10_KEEPALIVE_SECONDS", "12"))
@@ -127,6 +128,27 @@ API_RATE_LIMITER = MultiWindowRateLimiter([
     (3600, 1000),   # 1000 req/hour
     (86400, 2000),  # 2000 req/day
 ])
+
+
+def compute_poll_interval_seconds():
+    # Quota rates converted to req/s.
+    limits_rps = [
+        5.0,
+        1.0,
+        1000.0 / 3600.0,
+        2000.0 / max(1.0, EVENT_DURATION_HOURS * 3600.0),
+    ]
+
+    safety = RATE_SAFETY_MARGIN
+    if safety <= 0 or safety > 1:
+        safety = 0.9
+
+    allowed_rps = min(limits_rps) * safety
+    interval = max(1.0, 1.0 / allowed_rps)
+    return interval
+
+
+SLEEP_TIME = float(os.environ.get("STAMHOOFD_POLL_SECONDS", str(compute_poll_interval_seconds())))
 
 
 def crc8(data):
@@ -592,6 +614,12 @@ def print_startup_message(printer):
 def main():
     logger.info("Starting order watcher")
     logger.info("Polling URL: %s", API_URL)
+    logger.info(
+        "Poll interval: %.2fs (event=%.2fh, safety=%.2f)",
+        SLEEP_TIME,
+        EVENT_DURATION_HOURS,
+        RATE_SAFETY_MARGIN,
+    )
     logger.info("Printed-order store: %s", os.path.abspath(PRINTED_ORDERS_DIR))
     printer = MX10BlePrinter(MX10_BLE_ADDRESS, addr_type=MX10_BLE_ADDR_TYPE)
 
