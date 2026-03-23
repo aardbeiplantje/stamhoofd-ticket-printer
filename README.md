@@ -169,6 +169,9 @@ Run as systemd service (see [Systemd Setup](#systemd-setup) below).
 - `MX10_FONT_PATH` - Path to TrueType font file (default: system DejaVu Sans)
 - `MX10_KEEPALIVE_SECONDS` - Idle keepalive interval in seconds (default: `12`)
 - `STAMHOOFD_PRINTED_BASE_DIR` - Base directory for order state files (default: `printed_orders`)
+- `STAMHOOFD_EVENT_DURATION_HOURS` - Event duration used for quota-aware poll planning (default: `6`)
+- `STAMHOOFD_RATE_SAFETY_MARGIN` - Safety factor applied to the strictest quota (default: `0.9`)
+- `STAMHOOFD_POLL_SECONDS` - Optional fixed poll interval override in seconds (unset by default)
 
 **Troubleshooting:**
 
@@ -205,6 +208,7 @@ A service file is provided at `stamhoofd-printer.service` that:
 - **Logging**: All output goes to the systemd journal
 - **Security**: Runs with restricted filesystem access
 - Reads environment variables from `/etc/stamhoofd-printer.env`
+- Provides defaults for quota planning (`STAMHOOFD_EVENT_DURATION_HOURS=6`, `STAMHOOFD_RATE_SAFETY_MARGIN=0.9`)
 
 **1. Install host dependencies (preferred for systemd services on Debian/Ubuntu):**
 ```bash
@@ -236,8 +240,12 @@ sudo cp stamhoofd-printer.service /etc/systemd/system/
 **5. Create the environment config file:**
 ```bash
 sudo cp stamhoofd-printer.env.example /etc/stamhoofd-printer.env
-sudo nano /etc/stamhoofd-printer.env   # fill in your actual values
+sudo nano /etc/stamhoofd-printer.env   # fill in your actual values (including event duration)
 ```
+
+Rate-limit note:
+- The daemon enforces all API limits client-side and computes a safe poll interval using your event duration + safety margin.
+- If HTTP 429 still occurs, it backs off using `Retry-After` when available, otherwise with escalating delays (up to 6 hours).
 
 **6. Set proper permissions on the env file:**
 ```bash
@@ -285,7 +293,7 @@ If the service fails to start, check:
 ```
 Stamhoofd API
     ↓
-[Poll every 15 seconds]
+[Poll at quota-aware interval]
     ↓
 [New order detected]
     ↓
