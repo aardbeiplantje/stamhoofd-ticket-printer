@@ -180,6 +180,8 @@ Run as systemd service (see [Systemd Setup](#systemd-setup) below).
 - `MX10_FONT_PATH` - Path to TrueType font file (default: system DejaVu Sans)
 - `MX10_KEEPALIVE_SECONDS` - Idle keepalive interval in seconds (default: `12`)
 - `STAMHOOFD_PRINTED_BASE_DIR` - Base directory for order state files (default: `printed_orders`)
+- `STAMHOOFD_STATE_DIR` - Base directory for runtime state files (default: `/var/lib/stamhoofd-printer`)
+- `STAMHOOFD_SLEEP_STATE_FILE` - File storing current sleep/back-off state (default: `/var/lib/stamhoofd-printer/sleep_state.json`)
 - `STAMHOOFD_EVENT_DURATION_HOURS` - Event duration used for quota-aware poll planning (default: `6`)
 - `STAMHOOFD_RATE_SAFETY_MARGIN` - Safety factor applied to the strictest quota (default: `0.9`)
 - `STAMHOOFD_POLL_SECONDS` - Optional fixed poll interval override in seconds (unset by default)
@@ -200,6 +202,10 @@ MX10_BLE_ADDR_TYPE=random ./stamhoofd.py
 - Check `STAMHOOFD_PRINTED_BASE_DIR` exists and is writable
 - Verify API key and org/webshop IDs are correct
 - Look at logs for API errors (403, 404, etc.)
+
+**Sleep/back-off state is missing:**
+- Check `/var/lib/stamhoofd-printer/sleep_state.json`
+- Ensure `STAMHOOFD_STATE_DIR` or `STAMHOOFD_SLEEP_STATE_FILE` points to a writable path
 
 **Font rendering looks wrong:**
 - Set custom font: `MX10_FONT_PATH=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf`

@@ -32,6 +32,11 @@ MX10_BLE_ADDR_TYPE = os.environ.get("MX10_BLE_ADDR_TYPE", "public").lower()
 EVENT_DURATION_HOURS = float(os.environ.get("STAMHOOFD_EVENT_DURATION_HOURS", "6"))
 RATE_SAFETY_MARGIN = float(os.environ.get("STAMHOOFD_RATE_SAFETY_MARGIN", "0.9"))
 PRINTED_ORDERS_BASE_DIR = os.environ.get("STAMHOOFD_PRINTED_BASE_DIR", "printed_orders")
+STATE_DIR = os.environ.get("STAMHOOFD_STATE_DIR", "/var/lib/stamhoofd-printer")
+SLEEP_STATE_FILE = os.environ.get(
+    "STAMHOOFD_SLEEP_STATE_FILE",
+    os.path.join(STATE_DIR, "sleep_state.json"),
+)
 MX10_FONT_SIZE = int(os.environ.get("MX10_FONT_SIZE", "24"))
 MX10_KEEPALIVE_SECONDS = int(os.environ.get("MX10_KEEPALIVE_SECONDS", "12"))
 MX10_FONT_PATH = os.environ.get("MX10_FONT_PATH")
@@ -611,6 +616,22 @@ def print_startup_message(printer):
     printer.ensure_connected()
     printer.print_text(boot_text, feed_steps=20)
 
+
+def persist_sleep_state(seconds, reason):
+    directory = os.path.dirname(SLEEP_STATE_FILE)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+
+    payload = {
+        "sleep_seconds": float(seconds),
+        "reason": reason,
+        "updated_at": datetime.utcnow().isoformat() + "Z",
+    }
+    tmp_path = SLEEP_STATE_FILE + ".tmp"
+    with open(tmp_path, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=False, separators=(",", ":"))
+    os.replace(tmp_path, SLEEP_STATE_FILE)
+
 def main():
     logger.info("Starting order watcher")
     logger.info("Polling URL: %s", API_URL)
@@ -703,6 +724,14 @@ def main():
                 except Exception as e:
                     logger.warning(f"Keepalive failed, will reconnect later: {e}")
                     printer.disconnect()
+
+            sleep_reason = "poll"
+            if response.status_code == 429:
+                sleep_reason = "rate_limit_backoff"
+            try:
+                persist_sleep_state(sleep_seconds, sleep_reason)
+            except Exception as e:
+                logger.warning(f"Failed to persist sleep state to {SLEEP_STATE_FILE}: {e}")
 
             logger.info(f"Sleeping for {sleep_seconds} seconds")
             time.sleep(sleep_seconds) # Poll every X seconds, or back off on 429
