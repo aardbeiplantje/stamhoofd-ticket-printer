@@ -35,7 +35,7 @@ MX10_BLE_ADDR_TYPE = os.environ.get("MX10_BLE_ADDR_TYPE", "public").lower()
 EVENT_DURATION_HOURS = float(os.environ.get("STAMHOOFD_EVENT_DURATION_HOURS", "6"))
 RATE_SAFETY_MARGIN = float(os.environ.get("STAMHOOFD_RATE_SAFETY_MARGIN", "0.9"))
 PRINTED_ORDERS_BASE_DIR = os.environ.get("STAMHOOFD_PRINTED_BASE_DIR", "printed_orders")
-STATE_DIR = os.environ.get("STAMHOOFD_STATE_DIR", "/var/lib/stamhoofd-printer")
+STATE_DIR = os.environ.get("STAMHOOFD_STATE_DIR", "")
 SLEEP_STATE_FILE = os.environ.get(
     "STAMHOOFD_SLEEP_STATE_FILE",
     os.path.join(STATE_DIR, "sleep_state.json"),

@@ -21,6 +21,7 @@ EnvironmentFile=-/etc/stamhoofd-printer.env
 # Defaults used when not set in /etc/stamhoofd-printer.env
 Environment=STAMHOOFD_EVENT_DURATION_HOURS=6
 Environment=STAMHOOFD_RATE_SAFETY_MARGIN=0.9
+Environment=STAMHOOFD_STATE_DIR=/var/lib/stamhoofd-printer
 
 # Logging
 StandardOutput=journal
