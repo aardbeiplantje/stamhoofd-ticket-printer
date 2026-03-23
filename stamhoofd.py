@@ -22,10 +22,13 @@ logger = logging.getLogger(__name__)
 
 import requests
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import deque
 
 ORG_ID  = os.environ.get("STAMHOOFD_ORG_ID")
 WEBSHOP_ID = os.environ.get("STAMHOOFD_WEBSHOP_ID")
+WEBSHOP_IDS_RAW = os.environ.get("STAMHOOFD_WEBSHOP_IDS", "")
+MAX_PARALLEL_POLLS = max(1, int(os.environ.get("STAMHOOFD_MAX_PARALLEL_POLLS", "4")))
 API_KEY = os.environ.get("STAMHOOFD_API_KEY")
 MX10_BLE_ADDRESS = os.environ.get("MX10_BLE_ADDRESS")
 MX10_BLE_ADDR_TYPE = os.environ.get("MX10_BLE_ADDR_TYPE", "public").lower()
@@ -81,10 +84,37 @@ if MX10_BLE_ADDRESS is None or len(MX10_BLE_ADDRESS) == 0:
 if ORG_ID is None or len(ORG_ID) == 0:
     logger.error("Need STAMHOOFD_ORG_ID")
     sys.exit(1)
-if WEBSHOP_ID is None or len(WEBSHOP_ID) == 0:
-    logger.error("Need STAMHOOFD_WEBSHOP_ID")
+
+if WEBSHOP_IDS_RAW.strip():
+    WEBSHOP_IDS = [wid.strip() for wid in WEBSHOP_IDS_RAW.split(",") if wid.strip()]
+elif WEBSHOP_ID is not None and len(WEBSHOP_ID) > 0:
+    WEBSHOP_IDS = [WEBSHOP_ID]
+else:
+    WEBSHOP_IDS = []
+
+if not WEBSHOP_IDS:
+    logger.error("Need STAMHOOFD_WEBSHOP_IDS (comma-separated) or STAMHOOFD_WEBSHOP_ID")
     sys.exit(1)
-API_URL = f"https://{ORG_ID}.api.stamhoofd.app/v191/webshop/{WEBSHOP_ID}/orders"
+
+
+def unique_preserve_order(values):
+    seen = set()
+    result = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
+
+
+WEBSHOP_IDS = unique_preserve_order(WEBSHOP_IDS)
+
+
+def api_url_for(webshop_id):
+    return f"https://{ORG_ID}.api.stamhoofd.app/v191/webshop/{webshop_id}/orders"
+
+
 HEADERS = {"Authorization": f"Bearer {API_KEY}"}
 
 
@@ -511,10 +541,9 @@ def safe_path_component(value):
     return re.sub(r"[^A-Za-z0-9_.-]", "_", value)
 
 
-PRINTED_ORDERS_DIR = os.path.join(
+PRINTED_ORDERS_ORG_DIR = os.path.join(
     PRINTED_ORDERS_BASE_DIR,
     safe_path_component(ORG_ID),
-    safe_path_component(WEBSHOP_ID),
 )
 
 
@@ -539,8 +568,12 @@ def concise_order_summary(order):
     return f"#{order_number} (id={order_id}) tafel={table} items=[{items_text}]"
 
 
-def ensure_printed_orders_dir():
-    os.makedirs(PRINTED_ORDERS_DIR, exist_ok=True)
+def printed_orders_dir_for(webshop_id):
+    return os.path.join(PRINTED_ORDERS_ORG_DIR, safe_path_component(webshop_id))
+
+
+def ensure_printed_orders_dir(webshop_id):
+    os.makedirs(printed_orders_dir_for(webshop_id), exist_ok=True)
 
 
 def safe_order_filename(order_id):
@@ -548,22 +581,22 @@ def safe_order_filename(order_id):
     return re.sub(r"[^A-Za-z0-9_.-]", "_", order_id) + ".json"
 
 
-def order_file_path(order_id):
-    return os.path.join(PRINTED_ORDERS_DIR, safe_order_filename(order_id))
+def order_file_path(order_id, webshop_id):
+    return os.path.join(printed_orders_dir_for(webshop_id), safe_order_filename(order_id))
 
 
-def is_order_already_printed(order_id):
-    return os.path.exists(order_file_path(order_id)+".printed")
+def is_order_already_printed(order_id, webshop_id):
+    return os.path.exists(order_file_path(order_id, webshop_id) + ".printed")
 
 
-def save_printed_order(order):
+def save_printed_order(order, webshop_id):
     order_id = order.get("id")
     if not order_id:
         logger.error("Order has no id; cannot persist print state")
         sys.exit(1)
 
-    ensure_printed_orders_dir()
-    final_path = order_file_path(order_id)
+    ensure_printed_orders_dir(webshop_id)
+    final_path = order_file_path(order_id, webshop_id)
     tmp_path = final_path + ".tmp"
     with open(tmp_path, "w", encoding="utf-8") as fh:
         json.dump(order, fh, ensure_ascii=False, separators=(",", ":"))
@@ -632,16 +665,134 @@ def persist_sleep_state(seconds, reason):
         json.dump(payload, fh, ensure_ascii=False, separators=(",", ":"))
     os.replace(tmp_path, SLEEP_STATE_FILE)
 
+
+def fetch_webshop_response(webshop_id):
+    api_url = api_url_for(webshop_id)
+    try:
+        response = requests.get(api_url, headers=HEADERS, timeout=15)
+    except requests.RequestException as e:
+        return {
+            "webshop_id": webshop_id,
+            "url": api_url,
+            "status_code": None,
+            "error": str(e),
+            "orders": [],
+            "retry_after": None,
+        }
+
+    orders = []
+    if response.status_code == 200:
+        try:
+            orders = response.json().get("results", [])
+        except ValueError:
+            return {
+                "webshop_id": webshop_id,
+                "url": api_url,
+                "status_code": None,
+                "error": "Invalid JSON response",
+                "orders": [],
+                "retry_after": None,
+            }
+
+    return {
+        "webshop_id": webshop_id,
+        "url": api_url,
+        "status_code": response.status_code,
+        "error": None,
+        "orders": orders,
+        "retry_after": response.headers.get("Retry-After"),
+    }
+
+
+def fetch_all_webshop_responses(webshop_ids):
+    if len(webshop_ids) == 1:
+        API_RATE_LIMITER.wait_for_slot()
+        return [fetch_webshop_response(webshop_ids[0])]
+
+    max_workers = min(MAX_PARALLEL_POLLS, len(webshop_ids))
+    responses = []
+    futures = {}
+    positions = {wid: idx for idx, wid in enumerate(webshop_ids)}
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        for webshop_id in webshop_ids:
+            # Reserve a slot in the global limiter before dispatching each request.
+            API_RATE_LIMITER.wait_for_slot()
+            future = executor.submit(fetch_webshop_response, webshop_id)
+            futures[future] = webshop_id
+
+        for future in as_completed(futures):
+            responses.append(future.result())
+
+    responses.sort(key=lambda item: positions.get(item.get("webshop_id"), 0))
+    return responses
+
+
+def handle_webshop_orders(webshop_id, orders, printer):
+    neworders = {}
+    failorders = {}
+    printed_any = False
+
+    for order in orders:
+        order_id = order.get("id")
+        if not order_id:
+            logger.warning("Skipping order without id")
+            continue
+        if not is_order_already_printed(order_id, webshop_id):
+            order_number = order.get("number", "?")
+            try:
+                neworders[order_id] = order
+                saved_path = save_printed_order(order, webshop_id)
+                logger.info(
+                    f"Saved order #{order_number} (id={order_id}, webshop={webshop_id}) to {saved_path}"
+                )
+                items = order.get("data", {}).get("cart", {}).get("items", [])
+                if not items:
+                    logger.info(
+                        f"Order has no items; skipping print #{order_number} (id={order_id}, webshop={webshop_id})"
+                    )
+                    os.replace(saved_path, saved_path + ".printed")
+                    continue
+
+                logger.info("Printing new order %s (webshop=%s)", concise_order_summary(order), webshop_id)
+                order_text = generate_receipt(order)
+                try:
+                    printer.ensure_connected()
+                    printer.print_text(order_text)
+                    printed_any = True
+                    logger.info(f"Printed order #{order_number} (id={order_id}, webshop={webshop_id})")
+                    os.replace(saved_path, saved_path + ".printed")
+                except Exception as e:
+                    logger.error(
+                        f"Problem printing order #{order_number} (id={order_id}, webshop={webshop_id}), error: {e}"
+                    )
+                    printer.disconnect()
+                    failorders[order_id] = order
+            except Exception as e:
+                logger.error(
+                    f"Problem handling order #{order_number} (id={order_id}, webshop={webshop_id}), error: {e}"
+                )
+
+    if len(neworders):
+        if len(failorders):
+            logger.error(
+                f"Fetched/processed {len(neworders)} orders for webshop={webshop_id}, printed {len(neworders) - len(failorders)}"
+            )
+        else:
+            logger.info(f"Fetched/processed {len(neworders)} orders for webshop={webshop_id}")
+
+    return printed_any
+
 def main():
     logger.info("Starting order watcher")
-    logger.info("Polling URL: %s", API_URL)
+    logger.info("Polling webshops: %s", ", ".join(WEBSHOP_IDS))
     logger.info(
         "Poll interval: %.2fs (event=%.2fh, safety=%.2f)",
         SLEEP_TIME,
         EVENT_DURATION_HOURS,
         RATE_SAFETY_MARGIN,
     )
-    logger.info("Printed-order store: %s", os.path.abspath(PRINTED_ORDERS_DIR))
+    logger.info("Max parallel webshop polls: %d", MAX_PARALLEL_POLLS)
+    logger.info("Printed-order store root: %s", os.path.abspath(PRINTED_ORDERS_ORG_DIR))
     printer = MX10BlePrinter(MX10_BLE_ADDRESS, addr_type=MX10_BLE_ADDR_TYPE)
 
     try:
@@ -656,65 +807,52 @@ def main():
         while True:
             idle_print = True
             sleep_seconds = SLEEP_TIME
-            API_RATE_LIMITER.wait_for_slot()
-            response = requests.get(API_URL, headers=HEADERS, timeout=15)
-            if response.status_code == 200:
-                consecutive_429 = 0
-                orders = response.json().get('results', [])
-                neworders = {}
-                failorders = {}
-                for order in orders:
-                    order_id = order["id"]
-                    if not order_id:
-                        logger.warning("Skipping order without id: %s", concise_order_summary(order))
-                        continue
-                    if not is_order_already_printed(order_id):
-                        order_number = order.get("number", "?")
-                        try:
-                            neworders[order_id] = order
-                            saved_path = save_printed_order(order)
-                            logger.info(f"Saved order #{order_number} (id={order_id}) to {saved_path}")
-                            items = order.get("data", {}).get("cart", {}).get("items", [])
-                            if not items:
-                                logger.info(
-                                    f"Order has no items; skipping print #{order_number} (id={order_id})"
-                                )
-                                os.replace(saved_path, saved_path + ".printed")
-                                continue
-                            logger.info("Printing new order %s", concise_order_summary(order))
-                            order_text = generate_receipt(order)
-                            try:
-                                printer.ensure_connected()
-                                printer.print_text(order_text)
-                                idle_print = False
-                                logger.info(f"Printed order #{order_number} (id={order_id})")
-                                os.replace(saved_path, saved_path + ".printed")
-                            except Exception as e:
-                                logger.error(f"Problem printing order #{order_number} (id={order_id}), error: {e}")
-                                printer.disconnect()
-                                failorders[order_id] = order
-                        except Exception as e:
-                            logger.error(f"Problem handling order #{order_number} (id={order_id}), error: {e}")
-                if len(neworders):
-                    if len(failorders):
-                        logger.error(f"Fetched/processed {len(neworders)} orders, printed {len(neworders) - len(failorders)}")
-                    else:
-                        logger.info(f"Fetched/processed {len(neworders)} orders")
-            elif response.status_code == 429:
+            hit_rate_limit = False
+            responses = fetch_all_webshop_responses(WEBSHOP_IDS)
+
+            rate_limited_responses = [r for r in responses if r.get("status_code") == 429]
+            if rate_limited_responses:
                 consecutive_429 += 1
-                retry_after = response.headers.get("Retry-After")
-                if retry_after and retry_after.isdigit():
-                    sleep_seconds = max(int(retry_after), SLEEP_TIME)
+                hit_rate_limit = True
+
+                retry_after_seconds = []
+                for response_data in rate_limited_responses:
+                    retry_after = response_data.get("retry_after")
+                    if retry_after and retry_after.isdigit():
+                        retry_after_seconds.append(int(retry_after))
+
+                if retry_after_seconds:
+                    sleep_seconds = max(max(retry_after_seconds), SLEEP_TIME)
                 else:
                     # If Retry-After is missing, increase backoff aggressively.
                     # This avoids hammering the API when daily quota is exhausted.
                     sleep_seconds = min(max(180 * (2 ** (consecutive_429 - 1)), 180), 21600)
+
+                rate_limited_webshops = ", ".join(r["webshop_id"] for r in rate_limited_responses)
                 logger.warning(
-                    f"Order poll rate-limited (429, streak={consecutive_429}). Backing off for {sleep_seconds} seconds"
+                    f"Order poll rate-limited (429, webshops={rate_limited_webshops}, streak={consecutive_429}). Backing off for {sleep_seconds} seconds"
                 )
             else:
                 consecutive_429 = 0
-                logger.warning(f"Order poll failed: status={response.status_code} url={API_URL}")
+
+            for response_data in responses:
+                webshop_id = response_data["webshop_id"]
+                status_code = response_data.get("status_code")
+
+                if status_code == 200:
+                    printed_any = handle_webshop_orders(webshop_id, response_data.get("orders", []), printer)
+                    if printed_any:
+                        idle_print = False
+                elif status_code == 429:
+                    continue
+                elif status_code is None:
+                    logger.warning(
+                        f"Order poll failed for webshop={webshop_id}: {response_data.get('error')}"
+                    )
+                else:
+                    logger.warning(
+                        f"Order poll failed: status={status_code} url={response_data.get('url')}"
+                    )
 
             # Keep BLE session alive when idle so MX10 stays awake.
             if idle_print:
@@ -726,7 +864,7 @@ def main():
                     printer.disconnect()
 
             sleep_reason = "poll"
-            if response.status_code == 429:
+            if hit_rate_limit:
                 sleep_reason = "rate_limit_backoff"
             try:
                 persist_sleep_state(sleep_seconds, sleep_reason)

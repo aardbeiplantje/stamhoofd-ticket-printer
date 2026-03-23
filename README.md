@@ -12,7 +12,7 @@ pip install -r requirements.txt
 Configure environment variables and run:
 ```bash
 export STAMHOOFD_ORG_ID="your-org-id"
-export STAMHOOFD_WEBSHOP_ID="your-webshop-id"
+export STAMHOOFD_WEBSHOP_IDS="webshop-id-1,webshop-id-2"
 export STAMHOOFD_API_KEY="your-api-key"
 export MX10_BLE_ADDRESS="1A:11:27:22:D3:91"
 ./stamhoofd.py
@@ -58,7 +58,7 @@ bluetoothctl
 
 ## stamhoofd.py (Order Printer Daemon)
 
-Automated order printing daemon that monitors a Stamhoofd webshop for new orders and prints tickets to the MX10 printer via native BLE connection.
+Automated order printing daemon that monitors one or more Stamhoofd webshops for new orders and prints tickets to the MX10 printer via native BLE connection.
 
 **Stamhoofd API documentation:**
 - Official API docs: https://www.stamhoofd.be/docs/api/
@@ -97,10 +97,12 @@ Also requires:
 1. Set required environment variables:
 ```bash
 export STAMHOOFD_ORG_ID="your-org-id"
-export STAMHOOFD_WEBSHOP_ID="your-webshop-id"
+export STAMHOOFD_WEBSHOP_IDS="webshop-id-1,webshop-id-2"
 export STAMHOOFD_API_KEY="your-api-key"
 export MX10_BLE_ADDRESS="1A:11:27:22:D3:91"
 ```
+
+You can still use `STAMHOOFD_WEBSHOP_ID` for a single webshop. If both are set, `STAMHOOFD_WEBSHOP_IDS` takes precedence.
 
 2. Optionally configure printer and rendering:
 ```bash
@@ -121,7 +123,7 @@ export STAMHOOFD_PRINTED_BASE_DIR="printed_orders"  # where to store order state
 Run with default settings:
 ```bash
 STAMHOOFD_ORG_ID=abc123 \
-STAMHOOFD_WEBSHOP_ID=xyz789 \
+STAMHOOFD_WEBSHOP_IDS=xyz789,xyz790 \
 STAMHOOFD_API_KEY=sk_live_xxxxx \
 MX10_BLE_ADDRESS=1A:11:27:22:D3:91 \
 ./stamhoofd.py
@@ -132,7 +134,7 @@ With custom font and size:
 MX10_FONT_PATH=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf \
 MX10_FONT_SIZE=28 \
 STAMHOOFD_ORG_ID=abc123 \
-STAMHOOFD_WEBSHOP_ID=xyz789 \
+STAMHOOFD_WEBSHOP_IDS=xyz789,xyz790 \
 STAMHOOFD_API_KEY=sk_live_xxxxx \
 MX10_BLE_ADDRESS=1A:11:27:22:D3:91 \
 ./stamhoofd.py
@@ -159,8 +161,8 @@ Run as systemd service (see [Systemd Setup](#systemd-setup) below).
 **Log Output Example:**
 ```
 2026-03-21 19:50:05 - __main__ - INFO - Starting order watcher
-2026-03-21 19:50:05 - __main__ - INFO - Polling URL: https://2a68cc9c-23c4-4d77-b720-97b40b0e422f.api.stamhoofd.app/v191/webshop/9cb2150e-6101-47cc-ae11-1f811a432082/orders
-2026-03-21 19:50:05 - __main__ - INFO - Printed-order store: /home/user/stamhoofd-printer/printed_orders/2a68cc9c-23c4-4d77-b720-97b40b0e422f/9cb2150e-6101-47cc-ae11-1f811a432082
+2026-03-21 19:50:05 - __main__ - INFO - Polling webshops: 9cb2150e-6101-47cc-ae11-1f811a432082, b2f9d9c6-cf7a-4b1b-a4f1-0043e5a6a3a0
+2026-03-21 19:50:05 - __main__ - INFO - Printed-order store root: /home/user/stamhoofd-printer/printed_orders/2a68cc9c-23c4-4d77-b720-97b40b0e422f
 2026-03-21 19:50:20 - __main__ - INFO - Printing new order #42 (id=abc12345) tafel=5 items=[3x Beer, 2x Wine]
 2026-03-21 19:50:25 - __main__ - INFO - Printed order #42 (id=abc12345)
 2026-03-21 19:50:30 - __main__ - INFO - Sleeping for 15 seconds
@@ -170,9 +172,12 @@ Run as systemd service (see [Systemd Setup](#systemd-setup) below).
 
 **Required:**
 - `STAMHOOFD_ORG_ID` - Stamhoofd organization ID (UUID format)
-- `STAMHOOFD_WEBSHOP_ID` - Stamhoofd webshop ID (UUID format)
+- `STAMHOOFD_WEBSHOP_IDS` - Comma-separated Stamhoofd webshop IDs (UUID format)
 - `STAMHOOFD_API_KEY` - Stamhoofd API key (Bearer token)
 - `MX10_BLE_ADDRESS` - Bluetooth address of MX10 printer (XX:XX:XX:XX:XX:XX)
+
+**Backward compatible:**
+- `STAMHOOFD_WEBSHOP_ID` - Single webshop ID (used when `STAMHOOFD_WEBSHOP_IDS` is not set)
 
 **Optional:**
 - `MX10_BLE_ADDR_TYPE` - BLE address type: `public` (default) or `random`
@@ -185,6 +190,7 @@ Run as systemd service (see [Systemd Setup](#systemd-setup) below).
 - `STAMHOOFD_EVENT_DURATION_HOURS` - Event duration used for quota-aware poll planning (default: `6`)
 - `STAMHOOFD_RATE_SAFETY_MARGIN` - Safety factor applied to the strictest quota (default: `0.9`)
 - `STAMHOOFD_POLL_SECONDS` - Optional fixed poll interval override in seconds (unset by default)
+- `STAMHOOFD_MAX_PARALLEL_POLLS` - Max concurrent webshop API fetches per cycle (default: `4`)
 
 **Troubleshooting:**
 
