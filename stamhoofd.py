@@ -918,6 +918,17 @@ def _handle_sigterm(signum, frame):
     raise SystemExit(0)
 
 
+def _handle_sighup(signum, frame):
+    logger.info(
+        "Received SIGHUP (config reload requested) — "
+        "hot-reload not yet implemented; re-executing process"
+    )
+    # Flush log handlers so the message lands before exec replaces the process.
+    logging.shutdown()
+    os.execv(sys.executable, [sys.executable] + sys.argv)
+
+
 if __name__ == "__main__":
     signal.signal(signal.SIGTERM, _handle_sigterm)
+    signal.signal(signal.SIGHUP, _handle_sighup)
     main()
