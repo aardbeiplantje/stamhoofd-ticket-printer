@@ -2,6 +2,7 @@
 
 import os
 import sys
+import signal
 import json
 import re
 import socket
@@ -901,12 +902,22 @@ def main():
 
             logger.debug(f"Sleeping for {sleep_seconds} seconds")
             time.sleep(sleep_seconds) # Poll every X seconds, or back off on 429
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, SystemExit) as e:
+        sig = "SIGTERM" if isinstance(e, SystemExit) else "SIGINT"
+        logger.info(f"Received {sig} — shutting down gracefully")
         printer.disconnect()
+        logger.info("Shutdown complete")
     except OSError:
-        print("error", sys.exc_info()[1],file=sys.stderr)
+        logger.error(f"Fatal OS error: {sys.exc_info()[1]}")
         printer.disconnect()
         sys.exit(1)
 
+
+def _handle_sigterm(signum, frame):
+    logger.info("Received SIGTERM")
+    raise SystemExit(0)
+
+
 if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, _handle_sigterm)
     main()
