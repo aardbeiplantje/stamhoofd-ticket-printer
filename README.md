@@ -190,6 +190,7 @@ Run as systemd service (see [Systemd Setup](#systemd-setup) below).
 - `STAMHOOFD_SLEEP_STATE_FILE` - File storing current sleep/back-off state (default: `/var/lib/stamhoofd-printer/sleep_state.json`)
 - `STAMHOOFD_EVENT_DURATION_HOURS` - Event duration used for quota-aware poll planning (default: `6`)
 - `STAMHOOFD_RATE_SAFETY_MARGIN` - Safety factor applied to the strictest quota (default: `0.9`)
+- `STAMHOOFD_MAX_BACKOFF_SECONDS` - Maximum backoff delay (seconds) when hitting 429 rate limits. Backoff escalates exponentially (180, 360, 720, ...) and caps at this value (default: `3600` = 1 hour). For shorter events or high-availability needs, decrease this to avoid wasting the entire event window; for longer events, increase it if quota hits are expected.
 - `STAMHOOFD_POLL_SECONDS` - Optional fixed poll interval override in seconds (unset by default)
 - `STAMHOOFD_MAX_PARALLEL_POLLS` - Max concurrent webshop API fetches per cycle (default: `4`)
 

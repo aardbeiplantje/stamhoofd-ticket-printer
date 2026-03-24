@@ -66,6 +66,7 @@ SLEEP_STATE_FILE = os.environ.get(
     os.path.join(STATE_DIR, "sleep_state.json"),
 )
 TABLE_FIELD_NAME = os.environ.get("STAMHOOFD_TABLE_FIELD", "TAFEL")
+MAX_BACKOFF_SECONDS = int(os.environ.get("STAMHOOFD_MAX_BACKOFF_SECONDS", "3600"))
 MX10_FONT_SIZE = int(os.environ.get("MX10_FONT_SIZE", "24"))
 MX10_KEEPALIVE_SECONDS = int(os.environ.get("MX10_KEEPALIVE_SECONDS", "12"))
 MX10_FONT_PATH = os.environ.get("MX10_FONT_PATH")
@@ -855,7 +856,7 @@ def main():
                 else:
                     # If Retry-After is missing, increase backoff aggressively.
                     # This avoids hammering the API when daily quota is exhausted.
-                    sleep_seconds = min(max(180 * (2 ** (consecutive_429 - 1)), 180), 21600)
+                    sleep_seconds = min(max(180 * (2 ** (consecutive_429 - 1)), 180), MAX_BACKOFF_SECONDS)
 
                 rate_limited_webshops = ", ".join(r["webshop_id"] for r in rate_limited_responses)
                 logger.warning(
